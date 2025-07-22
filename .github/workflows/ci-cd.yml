@@ -1,0 +1,171 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  AWS_REGION: us-west-2
+  EB_ENVIRONMENT: my-music-env-optimized
+  EB_APPLICATION: my-music-recommender
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black
+    
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Format check with black
+      run: |
+        black --check --diff .
+    
+    - name: Run tests
+      run: |
+        pytest --cov=./ --cov-report=xml --cov-report=term-missing
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Install EB CLI
+      run: |
+        pip install awsebcli
+    
+    - name: Deploy to Elastic Beanstalk
+      run: |
+        # Initialize EB CLI if not already done
+        if [ ! -f .elasticbeanstalk/config.yml ]; then
+          eb init ${{ env.EB_APPLICATION }} --region ${{ env.AWS_REGION }} --platform "Docker"
+        fi
+        
+        # Deploy to environment
+        eb deploy ${{ env.EB_ENVIRONMENT }} --timeout 20
+    
+    - name: Wait for deployment
+      run: |
+        echo "Waiting for deployment to complete..."
+        sleep 60
+    
+    - name: Health check
+      run: |
+        # Wait for health check to pass
+        max_attempts=10
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          echo "Health check attempt $attempt/$max_attempts"
+          
+          # Get environment status
+          status=$(eb status ${{ env.EB_ENVIRONMENT }} --output json | jq -r '.Health')
+          
+          if [ "$status" = "Green" ]; then
+            echo "✅ Deployment successful! Health is Green"
+            break
+          elif [ "$status" = "Red" ]; then
+            echo "❌ Health check failed. Status: $status"
+            if [ $attempt -eq $max_attempts ]; then
+              echo "Deployment failed after $max_attempts attempts"
+              exit 1
+            fi
+          else
+            echo "⏳ Health status: $status. Waiting..."
+          fi
+          
+          sleep 30
+          attempt=$((attempt + 1))
+        done
+    
+    - name: Test application endpoints
+      run: |
+        # Get the application URL
+        app_url=$(eb status ${{ env.EB_ENVIRONMENT }} --output json | jq -r '.CNAME')
+        app_url="http://$app_url"
+        
+        echo "Testing application at: $app_url"
+        
+        # Test health endpoint
+        health_response=$(curl -s -o /dev/null -w "%{http_code}" "$app_url/health")
+        if [ "$health_response" = "200" ]; then
+          echo "✅ Health endpoint working"
+        else
+          echo "❌ Health endpoint failed: $health_response"
+          exit 1
+        fi
+        
+        # Test ping endpoint
+        ping_response=$(curl -s -o /dev/null -w "%{http_code}" "$app_url/ping")
+        if [ "$ping_response" = "200" ]; then
+          echo "✅ Ping endpoint working"
+        else
+          echo "❌ Ping endpoint failed: $ping_response"
+          exit 1
+        fi
+        
+        echo "🎉 All tests passed! Application is live at: $app_url"
+
+  notify:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment status
+      run: |
+        if [ "${{ needs.build-and-deploy.result }}" = "success" ]; then
+          echo "🎉 Deployment successful!"
+          echo "Application URL: http://${{ env.EB_ENVIRONMENT }}.eba-qwpd3pbm.us-west-2.elasticbeanstalk.com"
+        else
+          echo "❌ Deployment failed!"
+          exit 1
+        fi 

@@ -1,0 +1,27 @@
+[flake8]
+max-line-length = 127
+max-complexity = 10
+ignore = 
+    E203,
+    E501,
+    W503,
+    F401,
+    F403
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    .env,
+    .elasticbeanstalk,
+    .github,
+    *.pyc,
+    *.pyo,
+    *.pyd,
+    .pytest_cache,
+    .coverage,
+    htmlcov,
+    dist,
+    build,
+    *.egg-info 

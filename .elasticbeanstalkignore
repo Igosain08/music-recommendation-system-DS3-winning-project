@@ -1,0 +1,15 @@
+__pycache__/
+user_data/
+.DS_Store
+*.npy
+*.csv
+*.ipynb
+*.md
+*.log
+.git/
+.gitignore
+README.md
+.env
+.venv/
+venv/
+env/ 
