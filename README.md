@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI-Powered Music Recommendation System
 
 A sophisticated music recommendation system that uses machine learning to provide personalized song suggestions based on user mood and preferences.
@@ -225,3 +226,6 @@ This project demonstrates:
 - **Scalable Architecture**: Production-ready design
 
 Perfect for AI/ML internship applications! 
+=======
+# music-recommendation-system-DS3-winning-project
+>>>>>>> 9e4e590d28fe86ff98ea802e34b743c4efb264c9
