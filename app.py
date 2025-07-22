@@ -120,7 +120,7 @@ import sys
 import numpy as np
 import pandas as pd
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 import time
 import uuid
@@ -132,6 +132,9 @@ app.secret_key = os.urandom(24)  # For session management
 
 # Configure for better performance
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 year cache
+
+# Configure session settings
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)  # Sessions expire after 2 hours
 
 # Global variables
 recommender = None
@@ -420,10 +423,19 @@ def index():
     user = User(user_id)
     feedback_count = len(user.feedback_history) if hasattr(user, 'feedback_history') else 0
     
+    # Add session info for debugging
+    session_info = {
+        'username': session.get('username'),
+        'user_id': session.get('user_id'),
+        'session_id': session.get('_id', 'Not set'),
+        'permanent': session.get('_permanent', False)
+    }
+    
     return render_template('index.html', 
                           username=session['username'], 
                           feedback_count=feedback_count,
-                          personalization=feedback_count >= 5)
+                          personalization=feedback_count >= 5,
+                          session_info=session_info)
 
 @app.route('/ping')
 def ping():
@@ -441,6 +453,7 @@ def login():
         
         session['username'] = username
         session['user_id'] = f"user_{username.lower().replace(' ', '_')}"
+        session.permanent = True  # Make session permanent (will expire after 2 hours)
         return redirect(url_for('index'))
     
     return render_template('login.html')
@@ -499,6 +512,13 @@ def create_spotify_playlist():
 def logout():
     """Logout and clear session"""
     session.clear()
+    return redirect(url_for('login'))
+
+@app.route('/new_session')
+def new_session():
+    """Start a new session (clear current session)"""
+    session.clear()
+    flash('Started a new session. Please log in again.', 'info')
     return redirect(url_for('login'))
 
 @app.route('/recommend', methods=['POST'])

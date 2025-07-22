@@ -57,6 +57,19 @@
             </form>
         </div>
         {% endif %}
+        
+        <!-- Session Debug Info (only visible to you) -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6><i class="fas fa-info-circle"></i> Session Information (Debug)</h6>
+                <small class="text-muted">
+                    <strong>Username:</strong> {{ session_info.username }}<br>
+                    <strong>User ID:</strong> {{ session_info.user_id }}<br>
+                    <strong>Session Permanent:</strong> {{ session_info.permanent }}<br>
+                    <strong>Note:</strong> This session is only visible to you on this browser/computer.
+                </small>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
